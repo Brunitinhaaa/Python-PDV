@@ -1,4 +1,7 @@
 # Sistema de Caixa Ponto de Venda (PDV) com Interface Gráfica
+<p align="center">
+  <img src= "https://i.imgur.com/IPSNJqn.png" alt="Cabeçalho do Sistema PDV" width="500"/>
+</p>
 
 ## Descrição
 Este projeto tem como objetivo o desenvolvimento de um Sistema de Caixa Ponto de Venda (PDV) com Interface Gráfica, utilizando Python e banco de dados PostgreSQL. O sistema visa atender pequenos empreendedores, oferecendo funcionalidades de cadastro de produtos, gestão de estoque, controle de vendas, emissão de relatórios e integração com gateways de pagamento.
