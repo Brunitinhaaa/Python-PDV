@@ -1,9 +1,15 @@
+import smtplib
+import os
 from flask import Blueprint, request, jsonify
 from models.models import Administrador
 from models.database import db
 from flask_jwt_extended import create_access_token, jwt_required
 from flask_jwt_extended.exceptions import NoAuthorizationError
-from .auth import auth_required 
+from .auth import auth_required
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from passlib.hash import pbkdf2_sha256
+
 
 administradores_bp = Blueprint('administradores', __name__)
 
@@ -43,3 +49,116 @@ def adicionar_admin():
 @administradores_bp.errorhandler(NoAuthorizationError)
 def handle_no_authorization_error(error):
     return jsonify({"message": "Usuário administrador não logado"}), 401
+
+@administradores_bp.route('/listar', methods=['GET'])
+@auth_required
+def listar_administradores():
+    administradores = Administrador.query.all()
+
+    lista_admins = [
+        {   "id": admin.id,
+            "nome": admin.nome, "email": admin.email}
+        for admin in administradores
+    ]
+
+    print("\nAdministradores cadastrados:")
+    for admin in lista_admins:
+          print(f"| ID: {admin['id']} | Nome: {admin['nome']} | Email: {admin['email']}")
+    print("-" * 30)
+
+    return jsonify(lista_admins), 200
+
+@administradores_bp.route('/excluir', methods=['DELETE'])
+@auth_required
+def excluir_administrador():
+    data = request.get_json()
+    nome = data.get('nome').strip()
+
+    print(f"Procurando pelo nome: {nome}")
+    admin = Administrador.query.filter_by(nome=nome).first()
+
+    print(f"Administrador encontrado: {admin}")
+
+    if not admin:
+        print("Administrador não encontrado.")
+        return jsonify({"message": "Administrador não encontrado!"}), 404
+
+    total_admins = Administrador.query.count()
+    if total_admins <= 1:
+        print("Erro: Não é possível excluir o último administrador!")
+        return jsonify({"message": "Erro: Não é possível excluir o último administrador!"}), 400
+
+    nome_administrador = admin.nome
+
+    db.session.delete(admin)
+    db.session.commit()
+
+    enviar_email_exclusao(admin.email, nome_administrador)
+
+    print(f"Administrador {nome} excluído com sucesso!")
+    return jsonify({"message": f"Administrador {nome} excluído com sucesso!"}), 200
+
+
+def enviar_email_exclusao(email_destino, nome_administrador):
+    sender = "pdvpython@gmail.com"
+    senha = os.getenv("EMAIL_SENHA")
+    subject = "Exclusão de conta"
+    body = f"""
+    Olá {nome_administrador},
+
+    Este é um e-mail para informar que sua conta foi excluída com sucesso do sistema PDV-Python.
+
+    Caso tenha dúvidas ou não tenha solicitado a exclusão, entre em contato com o suporte.
+
+    Atenciosamente,
+    Equipe PDV-Python
+    """
+
+    msg = MIMEMultipart()
+    msg['From'] = sender
+    msg['To'] = email_destino
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain', 'utf-8')) 
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
+            servidor.starttls()
+            servidor.login(sender, senha)
+            servidor.sendmail(sender, email_destino, msg.as_string())
+
+        print("E-mail de exclusão enviado com sucesso!")
+    except Exception as e:
+        print(f"Erro ao enviar e-mail: {e}")
+
+@administradores_bp.route('/editar', methods=['PUT'])
+@auth_required
+def editar_admin():
+    # Extraímos o ID do administrador que será editado da requisição
+    data = request.get_json()
+    admin_id = data.get('id')  
+    
+    # Supondo que o frontend envie o ID do admin a ser editado
+
+    administrador = Administrador.query.filter_by(id=admin_id).first()
+
+    if not administrador:
+        return jsonify({"message": "Administrador não encontrado."}), 404
+
+    nome = data.get('nome')
+    if nome:
+        if Administrador.query.filter_by(nome=nome).first():
+            return jsonify({"message": "Este nome já está em uso por outro administrador."}), 400
+        administrador.nome = nome
+
+    email = data.get('email')
+    if email:
+        if Administrador.query.filter_by(email=email).first():
+            return jsonify({"message": "Este e-mail já está em uso por outro administrador."}), 400
+        administrador.email = email
+
+    senha = data.get('senha')
+    administrador.senha_hash = pbkdf2_sha256.hash(senha)  
+
+    db.session.commit()
+
+    return jsonify({"message": "Administrador atualizado com sucesso!"}), 200
