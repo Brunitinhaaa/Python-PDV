@@ -5,6 +5,7 @@ from config import Config
 
 from controllers.admin import administradores_bp
 from controllers.vendas import vendas_bp
+from controllers.produtos import produtos_bp
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -14,6 +15,8 @@ jwt = JWTManager(app)
 app.register_blueprint(administradores_bp, url_prefix='/admin')
 
 app.register_blueprint(vendas_bp, url_prefix='/vendas')
+
+app.register_blueprint(produtos_bp, url_prefix='/produtos')
 
 @app.route('/')
 def hello_world():

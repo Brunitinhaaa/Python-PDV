@@ -103,29 +103,53 @@ def enviar_email_exclusao(email_destino, nome_administrador):
     sender = "pdvpython@gmail.com"
     senha = os.getenv("EMAIL_SENHA")
     subject = "Exclusão de conta"
-    body = f"""
-    Olá {nome_administrador},
 
-    Este é um e-mail para informar que sua conta foi excluída com sucesso do sistema PDV-Python.
+    # ✅ Parte texto simples (fallback)
+    body_plain = f"""
+Olá {nome_administrador},
 
-    Caso tenha dúvidas ou não tenha solicitado a exclusão, entre em contato com o suporte.
+Sua conta foi excluída com sucesso do sistema PDV-Python.
 
-    Atenciosamente,
-    Equipe PDV-Python
+Se você não solicitou isso, entre em contato com o suporte.
+
+Equipe PDV-Python
     """
 
-    msg = MIMEMultipart()
+    # ✅ Parte HTML estilizada
+    body_html = f"""
+<html>
+ <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+   <div style="text-align: center;">
+     <img src="https://i.imgur.com/IPSNJqn.png" alt="PDV Python" style="max-width: 150px; margin-bottom: 20px;">
+    <h2 style="color: #333;">Conta Excluída</h2>
+   </div>
+   <p style="font-size: 16px; color: #555;">Olá <strong>{nome_administrador}</strong>,</p>
+   <p style="font-size: 16px; color: #555;">Informamos que sua conta foi <strong>excluída com sucesso</strong> do sistema <strong>PDV-Python</strong>.</p>
+   <p style="font-size: 16px; color: #555;">Caso você não tenha solicitado essa exclusão ou tenha dúvidas, entre em contato com nosso suporte.</p>
+   <p style="font-size: 16px; color: #555;">Atenciosamente,<br><strong>Equipe PDV-Python</strong></p>
+   <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;">
+   <p style="font-size: 12px; color: #999; text-align: center;">Este é um e-mail automático. Por favor, não responda.</p>
+  </div>
+ </body>
+</html>
+"""
+
+    # 🧩 Monta a mensagem multipart
+    msg = MIMEMultipart("alternative")
     msg['From'] = sender
     msg['To'] = email_destino
     msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain', 'utf-8')) 
+
+    # Adiciona as duas versões do corpo
+    msg.attach(MIMEText(body_plain, 'plain', 'utf-8'))
+    msg.attach(MIMEText(body_html, 'html', 'utf-8'))
 
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
             servidor.starttls()
             servidor.login(sender, senha)
             servidor.sendmail(sender, email_destino, msg.as_string())
-
         print("E-mail de exclusão enviado com sucesso!")
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")

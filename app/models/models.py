@@ -1,4 +1,5 @@
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON
 import uuid
 from models.database import db
 from passlib.hash import pbkdf2_sha256
@@ -43,7 +44,7 @@ class Vendas(db.Model):
     administrador_id = db.Column(UUID(as_uuid=True), db.ForeignKey('administradores.id'), nullable=False)
     cliente_id = db.Column(UUID(as_uuid=True), db.ForeignKey('clientes.id'), nullable=False)
     data_venda = db.Column(db.TIMESTAMP, default=datetime.utcnow)
-    itens = db.Column(db.JSONB, nullable=False)
+    itens = db.Column(db.JSON, nullable=False)
     total = db.Column(db.Numeric(10, 2), nullable=False)
     forma_pagamento = db.Column(db.String(50), nullable=False)
 
