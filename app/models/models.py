@@ -3,7 +3,7 @@ from sqlalchemy import JSON
 import uuid
 from models.database import db
 from passlib.hash import pbkdf2_sha256
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Administrador(db.Model):
     __tablename__ = 'administradores'
@@ -30,12 +30,16 @@ class Clientes(db.Model):
     email = db.Column(db.String(255), unique=True, nullable=False)
     telefone = db.Column(db.String(20), nullable=False)
     endereco = db.Column(db.String(255), nullable=False)
+    cpf = db.Column(db.String(11), unique=True, nullable=False)
+    cep = db.Column(db.String(8), nullable=False)
 
-    def __init__(self, nome, email, telefone, endereco):
+    def __init__(self, nome, email, telefone, endereco, cpf, cep):
         self.nome = nome
         self.email = email
         self.telefone = telefone
         self.endereco = endereco
+        self.cpf = cpf
+        self.cep = cep
     
 class Vendas(db.Model):
     __tablename__ = 'vendas'
@@ -43,7 +47,7 @@ class Vendas(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     administrador_id = db.Column(UUID(as_uuid=True), db.ForeignKey('administradores.id'), nullable=False)
     cliente_id = db.Column(UUID(as_uuid=True), db.ForeignKey('clientes.id'), nullable=False)
-    data_venda = db.Column(db.TIMESTAMP, default=datetime.utcnow)
+    data_venda = db.Column(db.TIMESTAMP, default=lambda: datetime.now(timezone.utc))
     itens = db.Column(db.JSON, nullable=False)
     total = db.Column(db.Numeric(10, 2), nullable=False)
     forma_pagamento = db.Column(db.String(50), nullable=False)
@@ -56,7 +60,7 @@ class Vendas(db.Model):
         self.cliente_id = cliente_id
         self.itens = itens
         self.total = total
-        self.forma_pagamento = forma_pagamento
+        self.forma_pagamento = forma_pagamento  
 
 class Produtos(db.Model):
     __tablename__ = 'produtos'

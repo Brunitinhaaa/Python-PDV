@@ -1,20 +1,19 @@
 import smtplib
 import os
+import re
+
 from flask import Blueprint, request, jsonify
 from models.database import db
-
 from flask_jwt_extended import create_access_token, jwt_required
 from flask_jwt_extended.exceptions import NoAuthorizationError
 from flask_jwt_extended import jwt_required, get_jwt_identity
-
 from .auth import auth_required
-
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
 from passlib.hash import pbkdf2_sha256
-
 from models.models import Clientes, Vendas, Produtos
+from utils.mercado_pago import criar_pagamento_pix
+from datetime import datetime, timezone
 
 vendas_bp = Blueprint('vendas', __name__)
 
@@ -30,11 +29,14 @@ def listar_clientes():
             "nome": cliente.nome, 
             "email": cliente.email,
             "telefone": cliente.telefone,
-            "endereço": cliente.endereco
+            "endereco": cliente.endereco,
+            "cpf": cliente.cpf,
+            "cep": cliente.cep
         }
         for cliente in clientes
     ]
     return jsonify(lista_clientes), 200
+
 
 @vendas_bp.route('/clientes', methods=['POST'])
 @auth_required  
@@ -44,11 +46,16 @@ def adicionar_clientes():
     email = data.get('email')
     telefone = data.get('telefone')
     endereco = data.get('endereco')
+    cpf = data.get('cpf')
+    cep = data.get('cep')
 
     if Clientes.query.filter_by(email=email).first():
-        return jsonify({"message": "cliente já existe com esse e-mail."}), 400
+        return jsonify({"message": "Cliente já existe com esse e-mail."}), 400
 
-    novo_cliente = Clientes(nome=nome, email=email, telefone=telefone, endereco=endereco) 
+    if Clientes.query.filter_by(cpf=cpf).first():
+        return jsonify({"message": "Cliente já existe com esse CPF."}), 400
+
+    novo_cliente = Clientes(nome=nome, email=email, telefone=telefone, endereco=endereco, cpf=cpf, cep=cep)
     db.session.add(novo_cliente)
     db.session.commit()
 
@@ -125,10 +132,15 @@ def editar_cliente():
     if "email" in data and Clientes.query.filter(Clientes.email == data["email"], Clientes.id != cliente_id).first():
         return jsonify({"message": "E-mail já está em uso por outro cliente."}), 400
 
+    if "cpf" in data and Clientes.query.filter(Clientes.cpf == data["cpf"], Clientes.id != cliente_id).first():
+        return jsonify({"message": "CPF já está em uso por outro cliente."}), 400
+
     cliente.nome = data.get("nome", cliente.nome)
     cliente.email = data.get("email", cliente.email)
     cliente.telefone = data.get("telefone", cliente.telefone)
     cliente.endereco = data.get("endereco", cliente.endereco)
+    cliente.cpf = data.get("cpf", cliente.cpf)
+    cliente.cep = data.get("cep", cliente.cep)
 
     db.session.commit()
 
@@ -291,7 +303,6 @@ def remover_item():
     carrinho['itens'] = novos_itens
     return jsonify({"message": "Item removido do carrinho!", "carrinho": carrinho}), 200
 
-
 # Limpar carrinho
 @vendas_bp.route('/vendas/limpar-carrinho', methods=['DELETE'])
 @auth_required
@@ -302,18 +313,86 @@ def limpar_carrinho():
         return jsonify({"message": "Carrinho limpo!"}), 200
     return jsonify({"message": "Carrinho já está vazio."}), 200
 
+# fazer pix
+@vendas_bp.route('/pagar-pix', methods=['POST'])
+@auth_required
+def pagar_pix():
+    admin_id = get_jwt_identity()
+    carrinho = carrinhos_em_memoria.get(admin_id)
 
-# Finalizar venda (grava no banco)
+    if not carrinho or not carrinho['itens']:
+        return jsonify({"message": "Carrinho vazio ou não iniciado."}), 400
+
+    total = sum(item['subtotal'] for item in carrinho['itens'])
+    cliente = Clientes.query.get(carrinho['cliente_id'])
+
+    if not cliente:
+        return jsonify({"message": "Cliente inválido."}), 400
+
+    # ------ Formatar Telefone ------
+    def formatar_telefone(telefone):
+        numeros = re.sub(r'\D', '', telefone)
+        if len(numeros) >= 10:
+            return numeros[:2], numeros[2:]
+        return "", numeros
+
+    ddd, numero_tel = formatar_telefone(cliente.telefone)
+
+    # ------ Separar Endereço ------
+    endereco_split = cliente.endereco.split(",")
+    street_name = endereco_split[0].strip()
+    street_number = endereco_split[1].strip() if len(endereco_split) > 1 else ""
+    neighborhood = endereco_split[2].strip() if len(endereco_split) > 2 else ""
+    federal_unit = endereco_split[3].strip() if len(endereco_split) > 3 else ""
+    
+    # ------ Montar Payer ------
+    payer = {
+        "email": cliente.email,
+        "first_name": cliente.nome.split()[0],
+        "last_name": " ".join(cliente.nome.split()[1:]),
+        "identification": {
+            "type": "CPF",
+            "number": cliente.cpf
+        },
+        "address": {
+            "zip_code": cliente.cep,
+            "street_name": street_name,
+            "street_number": street_number,
+            "neighborhood": neighborhood,
+            "city": "São Paulo",
+            "federal_unit": federal_unit
+        },
+        "phone": {
+            "area_code": ddd,
+            "number": numero_tel
+        }
+    }
+
+    try:
+        pagamento = criar_pagamento_pix(total, "Pagamento PDV-Python", payer, external_reference=admin_id)
+        return jsonify({
+            "message": "Pagamento Pix criado!",
+            "qr_code_base64": pagamento["qr_code_base64"],
+            "ticket_url": pagamento["ticket_url"]
+        }), 201
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 400
+
+# finaliza a venda
 @vendas_bp.route('/vendas/finalizar', methods=['POST'])
 @auth_required
 def finalizar_venda():
-    data = request.get_json()
     admin_id = get_jwt_identity()
+    data = request.get_json()
     forma_pagamento = data.get('forma_pagamento')
 
     carrinho = carrinhos_em_memoria.get(admin_id)
     if not carrinho or not carrinho['itens']:
         return jsonify({"message": "Carrinho vazio ou não iniciado."}), 400
+
+    # Verifica se o pagamento foi aprovado
+    if forma_pagamento == 'Pix' and carrinho.get('status_pagamento') != 'APROVADO':
+        return jsonify({"message": "Pagamento Pix não aprovado ainda."}), 400
 
     cliente = Clientes.query.get(carrinho['cliente_id'])
     if not cliente:
@@ -334,7 +413,8 @@ def finalizar_venda():
         cliente_id=carrinho['cliente_id'],
         itens=carrinho['itens'],
         total=total,
-        forma_pagamento=forma_pagamento or "PENDENTE"
+        forma_pagamento=forma_pagamento or "PENDENTE",
+        data_hora=datetime.now(timezone.utc) 
     )
 
     db.session.add(nova_venda)
@@ -346,4 +426,3 @@ def finalizar_venda():
         "venda_id": str(nova_venda.id),
         "total": total
     }), 200
-

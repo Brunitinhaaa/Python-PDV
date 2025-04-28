@@ -181,7 +181,8 @@ def editar_admin():
         administrador.email = email
 
     senha = data.get('senha')
-    administrador.senha_hash = pbkdf2_sha256.hash(senha)  
+    if senha:
+        administrador.senha_hash = pbkdf2_sha256.hash(senha)
 
     db.session.commit()
 
