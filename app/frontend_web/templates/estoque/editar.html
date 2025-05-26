@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastrar Produto</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estoque/editar.css') }}">
+</head>
+
+<body>
+<div class="wrapper">
+
+  <header class="home-header">
+    <div class="container header-container">
+      <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo-topo">
+    </div>
+  </header>
+
+  <section class="welcome-bar">
+    <div class="container welcome-container">
+      <div class="welcome-left">Olá, {{ user_name }}!</div>
+      <div class="welcome-center">Selecione o que deseja visualizar hoje:</div>
+      <div class="welcome-right">
+        <a href="{{ url_for('login_page') }}" class="logout">
+          <img src="{{ url_for('static', filename='img/logout.png') }}" alt="Sair">
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <nav class="main-nav">
+    <div class="container">
+      <ul>
+       <li>
+        <a href="{{ url_for('administradores.listar_admins_ui') }}" class="{% if menu == 'admin' %}active{% endif %}">
+          LISTAGEM DE ADMINISTRADORES
+        </a>
+      </li>
+        <li>
+          <a href="{{ url_for('vendas.listar_vendas_ui') }}" class="{% if menu == 'vendas' %}active{% endif %}">
+            VENDAS
+          </a>
+        </li>
+      <li>
+        <a href="{{ url_for('produtos.listar_produtos_ui') }}" class="{% if menu == 'estoque' %}active{% endif %}">
+          ESTOQUE
+        </a>
+      </li>
+      <li>RELATÓRIOS</li>
+    </ul>
+  </nav>
+
+<form id="form-editar" class="form-edit">
+  <div class="form-group">
+    <label for="nome">NOME</label>
+    <input id="nome" name="nome" type="text" value="{{ produto.nome }}" required>
+  </div>
+
+  <div class="form-group">
+    <label for="preco">PREÇO</label>
+    <input id="preco" name="preco" type="number" step="0.01" value="{{ produto.preco }}" required>
+  </div>
+
+  <div class="form-group">
+    <label for="descricao">DESCRIÇÃO</label>
+    <textarea id="descricao" name="descricao" required>{{ produto.descricao }}</textarea>
+  </div>
+
+  <div class="form-group">
+    <label for="quantidade">QNT EM ESTOQUE</label>
+    <input id="quantidade" name="quantidade" type="number" value="{{ produto.quantidade_estoque }}" required>
+  </div>
+
+  <div class="form-group">
+    <label for="categoria">CATEGORIA</label>
+    <input id="categoria" name="categoria" type="text" value="{{ produto.categoria }}">
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">SALVAR</button>
+    <a href="{{ url_for('produtos.listar_produtos_ui') }}" class="btn btn-secondary">CANCELAR</a>
+  </div>
+</form>
+
+<script>
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+
+  document.getElementById('form-editar')
+    .addEventListener('submit', async e => {
+      e.preventDefault();
+      const data = {
+        id: "{{ produto.id }}",
+        nome: e.target.nome.value,
+        descricao: e.target.descricao.value,
+        preco: parseFloat(e.target.preco.value),
+        quantidade: parseInt(e.target.quantidade.value, 10),
+        categoria: e.target.categoria.value
+      };
+
+      const resp = await fetch('/produtos/', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': getCookie('csrf_access_token')
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        return alert(err.message);
+      }
+      alert('Produto atualizado com sucesso!');
+      window.location.href = '{{ url_for("produtos.listar_produtos_ui") }}';
+    });
+</script>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Listar Administradores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/estoque/listar.css')}}">
+</head>
+
+<body>
+<div class="wrapper">
+
+  <header class="home-header">
+    <div class="container header-container">
+      <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo-topo">
+    </div>
+  </header>
+
+  <section class="welcome-bar">
+    <div class="container welcome-container">
+      <div class="welcome-left">Olá, {{ user_name }}!</div>
+      <div class="welcome-center">Selecione o que deseja visualizar hoje:</div>
+      <div class="welcome-right">
+        <a href="{{ url_for('login_page') }}" class="logout">
+          <img src="{{ url_for('static', filename='img/logout.png') }}" alt="Sair">
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <nav class="main-nav">
+    <div class="container">
+      <ul>
+       <li>
+        <a href="{{ url_for('administradores.listar_admins_ui') }}" class="{% if menu == 'admin' %}active{% endif %}">
+          LISTAGEM DE ADMINISTRADORES
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('vendas.listar_vendas_ui') }}" class="{% if menu == 'vendas' %}active{% endif %}">
+        VENDAS
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('produtos.listar_produtos_ui') }}" class="{% if menu == 'estoque' %}active{% endif %}">
+          ESTOQUE
+        </a>
+      </li>
+      <li>RELATÓRIOS</li>
+  </nav>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main class="container">
+    <section id="listar-container"></section>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const urlAddProdUI = "{{ url_for('produtos.adicionar_produto_ui') }}";
+      const srcCarrinhoAzul = "{{ url_for('static', filename='img/addProd.png') }}";
+      const srcEditar = "{{ url_for('static', filename='img/editar.png') }}";
+      const srcExcluir = "{{ url_for('static', filename='img/excluirProd.png') }}";
+
+      const resp = await fetch('/produtos/', {
+        method: 'GET',
+        credentials: 'include'
+      });
+
+      if (resp.status === 401) {
+        alert('Usuário não autorizado. Faça login novamente.');
+        return window.location.href = '{{ url_for("login_page") }}';
+      }
+
+      const produtos = await resp.json();
+      const container = document.getElementById('listar-container');
+
+      let html = `
+        <h2 class="listagem-title">LISTAGEM DE PRODUTOS</h2>
+        <div class="listagem-header">
+          <span class="col produto">PRODUTO</span>
+          <span class="col descricao">DESCRIÇÃO</span>
+          <span class="col preco">PREÇO</span>
+          <span class="col estoque">ESTOQUE</span>
+          <span class="col categoria">CATEGORIA</span>
+          <div class="col actions">
+            <a href="${urlAddProdUI}">
+              <img src="${srcCarrinhoAzul}" alt="Adicionar produto" title="Adicionar Produto">
+            </a>
+          </div>
+        </div>
+        <div class="listagem-body">
+      `;
+
+      produtos.forEach(p => {
+        html += `
+          <div class="listagem-row">
+            <span class="col produto">${p.nome}</span>
+            <span class="col descricao">${p.descricao}</span>
+            <span class="col preco">R$ ${p.preco.toFixed(2)}</span>
+            <span class="col estoque">${p.quantidade} QT</span>
+            <span class="col categoria">${p.categoria || ''}</span>
+            <div class="col actions">
+              <a href="/produtos/editar-ui/${p.id}">
+                <img src="${srcEditar}" alt="Editar produto" title="Editar Produto">
+              </a>
+              <a href="javascript:void(0)" class="btn-delete" data-id="${p.id}">
+                <img src="${srcExcluir}" alt="Excluir produto" title="Excluir Produto">
+              </a>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+      container.innerHTML = html;
+
+      container.addEventListener('click', async e => {
+        const btn = e.target.closest('.btn-delete');
+        if (!btn) return;
+
+        if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+
+        const csrfToken = getCookie('csrf_access_token');
+
+        const respDel = await fetch('/produtos/', {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+          },
+          body: JSON.stringify({ id: btn.dataset.id })
+        });
+
+        if (respDel.ok) {
+          alert('Produto excluído com sucesso!');
+          btn.closest('.listagem-row').remove();
+        } else {
+          const err = await respDel.json();
+          alert(err.message || 'Erro ao excluir produto.');
+        }
+      });
+
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+      }
+    });
+  </script>
+
+</body>
+</html>

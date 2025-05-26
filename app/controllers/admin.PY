@@ -1,189 +1,133 @@
-import smtplib
+# app/controllers/admin.py
 import os
-from flask import Blueprint, request, jsonify
+import smtplib
+from flask import (
+    Blueprint, render_template,
+    request, jsonify
+)
 from models.models import Administrador
 from models.database import db
-from flask_jwt_extended import create_access_token, jwt_required
-from flask_jwt_extended.exceptions import NoAuthorizationError
+from flask_jwt_extended import (
+    create_access_token,
+    set_access_cookies,
+    jwt_required,
+    get_jwt_identity
+)
 from .auth import auth_required
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from passlib.hash import pbkdf2_sha256
-
 
 administradores_bp = Blueprint('administradores', __name__)
 
 @administradores_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    email = data.get('email')
-    senha = data.get('senha')
-
-    administrador = Administrador.query.filter_by(email=email).first()
-
-    if not administrador or not administrador.verify_password(senha):
+    admin = Administrador.query.filter_by(email=data.get('email')).first()
+    if not admin or not admin.verify_password(data.get('senha')):
         return jsonify({"message": "Credenciais inválidas"}), 401
 
-    token = create_access_token(identity=administrador.id)
-    return jsonify({"token": token}), 200
+    token = create_access_token(identity=admin.id)
+    resp = jsonify({"message": "Login OK"})
+    set_access_cookies(resp, token)
+    return resp, 200
 
+@administradores_bp.route('/listar-ui')
+def listar_admins_ui():
+    admins = Administrador.query.all()
+    return render_template('administradores/listar.html', admins=admins, user_name='Bruna', menu='admin')
+
+@administradores_bp.route('/listar')
+def listar_admins():
+    admins = Administrador.query.all()
+    return jsonify([{'id':a.id,'nome':a.nome,'email':a.email} for a in admins])
+
+@administradores_bp.route('/adicionar-ui')
+def adicionar_admin_ui():
+    return render_template('administradores/add.html', user_name='Bruna')
 
 @administradores_bp.route('/adicionar', methods=['POST'])
-@auth_required  
 def adicionar_admin():
     data = request.get_json()
-
     nome = data.get('nome')
     email = data.get('email')
     senha = data.get('senha')
 
     if Administrador.query.filter_by(email=email).first():
-        return jsonify({"message": "Administrador já existe com esse e-mail."}), 400
+        return jsonify({"message": "Já existe um administrador cadastrado com esse e-mail!"}), 400
 
-    novo_admin = Administrador(nome=nome, email=email, senha=senha) 
-    db.session.add(novo_admin)
+    novo = Administrador(
+      nome=nome,
+      email=email,
+      senha=senha
+    )
+
+    db.session.add(novo)
     db.session.commit()
 
-    return jsonify({"message": "Administrador adicionado com sucesso!"}), 201
+    return jsonify({'message':'Administrador adicionado com sucesso!'}), 201
 
-@administradores_bp.errorhandler(NoAuthorizationError)
-def handle_no_authorization_error(error):
-    return jsonify({"message": "Usuário administrador não logado"}), 401
+@administradores_bp.route('/editar-ui/<string:admin_id>', methods=['GET'])
+@jwt_required()
+def editar_admin_ui(admin_id):
+    user_id = get_jwt_identity()
+    user = Administrador.query.get(user_id)
+    admin = Administrador.query.get_or_404(admin_id)
+    return render_template(
+        'administradores/editar.html',
+        user_name=user.nome,
+        admin=admin, menu='admin'
+    )
 
-@administradores_bp.route('/listar', methods=['GET'])
+@administradores_bp.route('/editar', methods=['PUT'])
 @auth_required
-def listar_administradores():
-    administradores = Administrador.query.all()
+def editar_admin():
+    data = request.get_json()
+    admin = Administrador.query.get(data.get('id'))
+    if not admin:
+        return jsonify({"message": "Administrador não encontrado."}), 404
+    if data.get('nome'):
+        admin.nome = data['nome']
+    if data.get('email'):
+        admin.email = data['email']
+    if data.get('senha'):
+        admin.senha_hash = pbkdf2_sha256.hash(data['senha'])
+    db.session.commit()
+    return jsonify({"message": "Administrador atualizado com sucesso!"}), 200
 
-    lista_admins = [
-        {   "id": admin.id,
-            "nome": admin.nome, "email": admin.email}
-        for admin in administradores
-    ]
-
-    print("\nAdministradores cadastrados:")
-    for admin in lista_admins:
-          print(f"| ID: {admin['id']} | Nome: {admin['nome']} | Email: {admin['email']}")
-    print("-" * 30)
-
-    return jsonify(lista_admins), 200
 
 @administradores_bp.route('/excluir', methods=['DELETE'])
 @auth_required
 def excluir_administrador():
     data = request.get_json()
     nome = data.get('nome').strip()
-
-    print(f"Procurando pelo nome: {nome}")
     admin = Administrador.query.filter_by(nome=nome).first()
-
-    print(f"Administrador encontrado: {admin}")
-
     if not admin:
-        print("Administrador não encontrado.")
         return jsonify({"message": "Administrador não encontrado!"}), 404
-
-    total_admins = Administrador.query.count()
-    if total_admins <= 1:
-        print("Erro: Não é possível excluir o último administrador!")
-        return jsonify({"message": "Erro: Não é possível excluir o último administrador!"}), 400
-
-    nome_administrador = admin.nome
+    if Administrador.query.count() <= 1:
+        return jsonify({"message": "Não é possível excluir o último administrador!"}), 400
 
     db.session.delete(admin)
     db.session.commit()
-
-    enviar_email_exclusao(admin.email, nome_administrador)
-
-    print(f"Administrador {nome} excluído com sucesso!")
+    enviar_email_exclusao(admin.email, admin.nome)
     return jsonify({"message": f"Administrador {nome} excluído com sucesso!"}), 200
-
 
 def enviar_email_exclusao(email_destino, nome_administrador):
     sender = "pdvpython@gmail.com"
     senha = os.getenv("EMAIL_SENHA")
     subject = "Exclusão de conta"
-
-    # ✅ Parte texto simples (fallback)
-    body_plain = f"""
-Olá {nome_administrador},
-
-Sua conta foi excluída com sucesso do sistema PDV-Python.
-
-Se você não solicitou isso, entre em contato com o suporte.
-
-Equipe PDV-Python
-    """
-
-    # ✅ Parte HTML estilizada
-    body_html = f"""
-<html>
- <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
-  <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-   <div style="text-align: center;">
-     <img src="https://i.imgur.com/IPSNJqn.png" alt="PDV Python" style="max-width: 150px; margin-bottom: 20px;">
-    <h2 style="color: #333;">Conta Excluída</h2>
-   </div>
-   <p style="font-size: 16px; color: #555;">Olá <strong>{nome_administrador}</strong>,</p>
-   <p style="font-size: 16px; color: #555;">Informamos que sua conta foi <strong>excluída com sucesso</strong> do sistema <strong>PDV-Python</strong>.</p>
-   <p style="font-size: 16px; color: #555;">Caso você não tenha solicitado essa exclusão ou tenha dúvidas, entre em contato com nosso suporte.</p>
-   <p style="font-size: 16px; color: #555;">Atenciosamente,<br><strong>Equipe PDV-Python</strong></p>
-   <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;">
-   <p style="font-size: 12px; color: #999; text-align: center;">Este é um e-mail automático. Por favor, não responda.</p>
-  </div>
- </body>
-</html>
-"""
-
-    # 🧩 Monta a mensagem multipart
+    body_plain = f"Olá {nome_administrador},\n\nSua conta foi excluída..."
+    body_html = f"<p>Olá <strong>{nome_administrador}</strong>, sua conta foi excluída...</p>"
     msg = MIMEMultipart("alternative")
     msg['From'] = sender
     msg['To'] = email_destino
     msg['Subject'] = subject
-
-    # Adiciona as duas versões do corpo
     msg.attach(MIMEText(body_plain, 'plain', 'utf-8'))
     msg.attach(MIMEText(body_html, 'html', 'utf-8'))
-
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
             servidor.starttls()
             servidor.login(sender, senha)
             servidor.sendmail(sender, email_destino, msg.as_string())
-        print("E-mail de exclusão enviado com sucesso!")
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")
-
-@administradores_bp.route('/editar', methods=['PUT'])
-@auth_required
-def editar_admin():
-    # Extraímos o ID do administrador que será editado da requisição
-    data = request.get_json()
-    admin_id = data.get('id')  
-    
-    # Supondo que o frontend envie o ID do admin a ser editado
-
-    administrador = Administrador.query.filter_by(id=admin_id).first()
-
-    if not administrador:
-        return jsonify({"message": "Administrador não encontrado."}), 404
-
-    nome = data.get('nome')
-    if nome:
-        if Administrador.query.filter_by(nome=nome).first():
-            return jsonify({"message": "Este nome já está em uso por outro administrador."}), 400
-        administrador.nome = nome
-
-    email = data.get('email')
-    if email:
-        if Administrador.query.filter_by(email=email).first():
-            return jsonify({"message": "Este e-mail já está em uso por outro administrador."}), 400
-        administrador.email = email
-
-    senha = data.get('senha')
-    if senha:
-        administrador.senha_hash = pbkdf2_sha256.hash(senha)
-
-    db.session.commit()
-
-    return jsonify({"message": "Administrador atualizado com sucesso!"}), 200

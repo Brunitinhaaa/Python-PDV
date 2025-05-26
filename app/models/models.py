@@ -71,13 +71,15 @@ class Produtos(db.Model):
     preco = db.Column(db.Numeric(10, 2), nullable=False)
     quantidade_estoque = db.Column(db.Integer, nullable=False)
     categoria = db.Column(db.String(100))
+    codigo_barras = db.Column(db.String(50), unique=True, nullable=False)
 
-    def __init__(self, nome, descricao, preco, quantidade_estoque, categoria=None):
+    def __init__(self, nome, descricao, preco, quantidade_estoque, categoria=None, codigo_barras=None):
         self.nome = nome
         self.descricao = descricao
         self.preco = preco
         self.quantidade_estoque = quantidade_estoque
         self.categoria = categoria
+        self.codigo_barras = codigo_barras
 
     def atualizar_estoque(self, quantidade):
         if self.quantidade_estoque + quantidade < 0:

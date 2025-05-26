@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Login – Uai PDV</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <div class="login-container">
+    <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo">
+    <form id="login-form" class="login-form">
+      <label for="email">Email:</label>
+      <input id="email" name="email" type="email" placeholder="Digite o seu email" required>
+      <label for="senha">Senha:</label>
+      <input id="senha" name="senha" type="password" placeholder="Digite a sua senha" required>
+      <button type="submit" class="btn-login">LOGIN</button>
+    </form>
+  </div>
+<script>
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const senha = document.getElementById('senha').value;
+
+    const resp = await fetch('/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, senha }),
+      credentials: 'include'
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      return alert(err.message);
+    }
+    window.location.href = '/home';
+  });
+</script>
+</body>
+</html>

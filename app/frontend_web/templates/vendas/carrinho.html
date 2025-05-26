@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Carrinho</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vendas/carrinho.css') }}">
+</head>
+
+<body>
+<div class="wrapper">
+
+  <header class="home-header">
+    <div class="container header-container">
+      <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo-topo">
+    </div>
+  </header>
+
+  <section class="welcome-bar">
+    <div class="container welcome-container">
+      <div class="welcome-left">Olá, {{ user_name }}!</div>
+      <div class="welcome-center">Selecione o que deseja visualizar hoje:</div>
+      <div class="welcome-right">
+        <a href="{{ url_for('login_page') }}" class="logout">
+          <img src="{{ url_for('static', filename='img/logout.png') }}" alt="Sair">
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <nav class="main-nav">
+    <div class="container">
+      <ul>
+        <li>
+          <a href="{{ url_for('administradores.listar_admins_ui') }}">
+            LISTAGEM DE ADMINISTRADORES
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('vendas.listar_vendas_ui') }}" class="{% if menu == 'vendas' %}active{% endif %}">VENDAS</a>
+        </li>
+        <li>
+          <a href="{{ url_for('produtos.listar_produtos_ui') }}" class="{% if menu == 'produtos' %}active{% endif %}">ESTOQUE</a>
+        </li>
+        <li>RELATÓRIOS</li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="carrinho-container">
+    <h2>CARRINHO</h2>
+
+    <form id="add-item-form" class="codigo-barras-form">
+      <label for="codigo_barras">Adicionar Produto via Código de Barras:</label>
+      <div class="input-group">
+        <input type="text" id="codigo_barras" name="codigo_barras" placeholder="Escaneie ou digite o código..." autofocus required>
+        <input type="number" id="quantidade" name="quantidade" value="1" min="1">
+        <button type="submit" class="btn-adicionar">➕ Adicionar</button>
+      </div>
+    </form>
+
+    <div class="carrinho-header">
+      <div>ID</div>
+      <div>DESCRIÇÃO</div>
+      <div>QUANTIDADE</div>
+      <div>PREÇO UNITÁRIO</div>
+      <div>AÇÕES</div>
+    </div>
+
+    {% for item in carrinho['itens'] %}
+    <div class="carrinho-item">
+      <div>{{ item.produto_id }}</div>
+      <div>{{ item.nome }}</div>
+      <div>
+        <strong>{{ "%02d"|format(item.quantidade) }}</strong>
+        {% if item.erro_estoque %}
+          <span class="alerta-icon">⚠️</span>
+        {% endif %}
+      </div>
+      <div>{{ "{:,.2f}".format(item.subtotal) }}</div>
+      <div class="acoes">
+        <form action="{{ url_for('vendas.alterar_item') }}" method="post">
+          <input type="hidden" name="produto_id" value="{{ item.produto_id }}">
+          <button type="submit" class="btn-icone">✏️</button>
+        </form>
+        <form action="{{ url_for('vendas.remover_item') }}" method="post">
+          <input type="hidden" name="produto_id" value="{{ item.produto_id }}">
+          <button type="submit" class="btn-icone">🗑️</button>
+        </form>
+      </div>
+    </div>
+
+    {% if item.erro_estoque %}
+    <div class="alerta-estoque">
+      <strong>OBS:</strong> O ITEM {{ item.nome | upper }} EXCEDEU A QUANTIDADE DE ITENS DISPONÍVEIS EM ESTOQUE.
+    </div>
+    {% endif %}
+    {% endfor %}
+
+      <div class="cliente">
+      <label for="cliente-busca">CLIENTE</label>
+      <input type="text" id="cliente-busca" name="cliente" placeholder="Pesquisar Cliente na Base de Dados...">
+      <div id="sugestoes-clientes" class="sugestoes"></div>
+    </div>
+
+    <div class="vendedor">
+      <label>VENDEDOR</label>
+      <div>{{ user_name }}</div>
+    </div>
+
+    <div class="pagamento">
+      <label>FORMA DE PAGAMENTO:</label>
+      <button type="button" class="forma-pagamento ativo">CARTÃO</button>
+      <button type="button" class="forma-pagamento">PIX</button>
+      <button type="button" class="forma-pagamento">DINHEIRO</button>
+      <input type="hidden" id="forma_pagamento" name="forma_pagamento" value="CARTÃO">
+    </div>
+
+    <script>
+document.getElementById('cliente-busca').addEventListener('input', function() {
+  const termo = this.value;
+  const sugestoesDiv = document.getElementById('sugestoes-clientes');
+
+  if (termo.length < 2) {
+    sugestoesDiv.innerHTML = '';
+    return;
+  }
+
+  fetch('/vendas/clientes?termo=' + encodeURIComponent(termo))
+    .then(response => response.json())
+    .then(clientes => {
+      sugestoesDiv.innerHTML = '';
+      clientes.forEach(cliente => {
+        const div = document.createElement('div');
+        div.textContent = cliente.nome + " - " + cliente.email;
+        div.addEventListener('click', function() {
+          document.getElementById('cliente-busca').value = cliente.nome;
+          sugestoesDiv.innerHTML = '';
+          // Aqui você pode também armazenar o ID do cliente para usar na venda
+        });
+        sugestoesDiv.appendChild(div);
+      });
+    });
+});
+</script>
+
+    <div class="acoes-finais">
+      <form action="{{ url_for('vendas.limpar_carrinho') }}" method="post">
+        <button class="btn-primario">LIMPAR CARRINHO</button>
+      </form>
+      <div class="total">
+        <div class="titulo">TOTAL DA COMPRA:</div>
+        <div class="valor">
+          R$ {{
+            carrinho['itens'] | map(attribute='subtotal') | sum | round(2)
+          }}
+        </div>
+      </div>
+      <form action="{{ url_for('vendas.finalizar_venda') }}" method="post">
+        <button class="btn-primario">FINALIZAR VENDA</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function getCookie(name) {
+    let value = "; " + document.cookie;
+    let parts = value.split("; " + name + "=");
+    if (parts.length === 2) return parts.pop().split(";").shift();
+  }
+
+  document.getElementById('add-item-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const codigo = document.getElementById('codigo_barras').value;
+    const quantidade = document.getElementById('quantidade').value;
+
+    fetch('/vendas/adicionar-item', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': getCookie('csrf_access_token')
+      },
+      body: JSON.stringify({
+        codigo_barras: codigo,
+        quantidade: parseInt(quantidade, 10)
+      })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Erro ao adicionar item!');
+      return response.json();
+    })
+    .then(data => {
+      alert(data.message);
+      location.reload();
+    })
+    .catch(error => alert(error.message));
+  });
+</script>
+
+</body>
+</html>

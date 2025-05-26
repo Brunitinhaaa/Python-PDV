@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Listar Administradores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/administradores/listar.css') }}">
+</head>
+
+<body>
+<div class="wrapper">
+
+  <header class="home-header">
+    <div class="container header-container">
+      <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo-topo">
+    </div>
+  </header>
+
+  <section class="welcome-bar">
+    <div class="container welcome-container">
+      <div class="welcome-left">Olá, {{ user_name }}!</div>
+      <div class="welcome-center">Selecione o que deseja visualizar hoje:</div>
+      <div class="welcome-right">
+        <a href="{{ url_for('login_page') }}" class="logout">
+          <img src="{{ url_for('static', filename='img/logout.png') }}" alt="Sair">
+        </a>
+      </div>
+    </div>
+  </section>
+
+<nav class="main-nav">
+    <div class="container">
+      <ul>
+       <li>
+        <a href="{{ url_for('administradores.listar_admins_ui') }}" class="{% if menu == 'admin' %}active{% endif %}">
+          LISTAGEM DE ADMINISTRADORES
+        </a>
+      </li>
+        <li>
+          <a href="{{ url_for('vendas.listar_vendas_ui') }}" class="{% if menu == 'vendas' %}active{% endif %}">
+            VENDAS
+          </a>
+        </li>
+      <li>
+        <a href="{{ url_for('produtos.listar_produtos_ui') }}" class="{% if menu == 'estoque' %}active{% endif %}">
+          ESTOQUE
+        </a>
+      </li>
+      <li>RELATÓRIOS</li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    <section id="listar-container"></section>
+  </main>
+
+  <script>
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const urlAdd   = "{{ url_for('administradores.adicionar_admin_ui') }}";
+      const srcAdd   = "{{ url_for('static', filename='img/adicionar.png') }}";
+      const srcEdit  = "{{ url_for('static', filename='img/editar.png') }}";
+      const srcTrash = "{{ url_for('static', filename='img/excluir.png') }}";
+
+      const resp = await fetch('/admin/listar', {
+        method: 'GET',
+        credentials: 'include'
+      });
+
+      if (resp.status === 401) {
+        alert('Usuário não autorizado. Faça login novamente.');
+        return window.location.href = '{{ url_for("login_page") }}';
+      }
+
+      const admins = await resp.json();
+      const container = document.getElementById('listar-container');
+
+      if (!admins.length) {
+        container.innerHTML = '<p>Nenhum administrador cadastrado.</p>';
+        return;
+      }
+
+      let html = `
+        <h2 class="listagem-title">LISTAGEM DE ADMINISTRADORES</h2>
+        <div class="listagem-header">
+          <span class="col id">ID</span>
+          <span class="col nome">NOME</span>
+          <span class="col email">EMAIL</span>
+          <div class="col actions">
+            <a href="${urlAdd}">
+              <img src="${srcAdd}" alt="Adicionar admin">
+            </a>
+          </div>
+        </div>
+        <div class="listagem-body">
+      `;
+
+      admins.forEach(a => {
+        const idStr = String(a.id).padStart(6, '0');
+        const urlEdit = `/admin/editar-ui/${a.id}`;
+        html += `
+          <div class="listagem-row">
+            <span class="col id">${idStr}</span>
+            <span class="col nome">${a.nome}</span>
+            <span class="col email">${a.email}</span>
+            <div class="col actions">
+              <a href="${urlEdit}">
+                <img src="${srcEdit}" alt="Editar admin">
+              </a>
+              <a href="javascript:void(0)" class="btn-delete" data-nome="${a.nome}">
+                <img src="${srcTrash}" alt="Excluir admin">
+              </a>
+            </div>
+          </div>
+        `;
+      });
+
+      html += '</div>';
+      container.innerHTML = html;
+
+      container.addEventListener('click', async e => {
+        const btn = e.target.closest('.btn-delete');
+        if (!btn) return;
+
+        const nome = btn.dataset.nome;
+
+        if (!confirm(`Tem certeza que deseja excluir o administrador "${nome}"?`)) {
+          return;
+        }
+
+        const csrfToken = getCookie('csrf_access_token');
+
+        const respDel = await fetch('/admin/excluir', {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+          },
+          body: JSON.stringify({ nome })
+        });
+
+        let err = {};
+        try {
+          err = await respDel.json();
+        } catch (e) {
+          err = {};
+        }
+
+        if (respDel.ok) {
+          alert(`Administrador "${nome}" excluído!`);
+          btn.closest('.listagem-row').remove();
+        } else {
+          alert(err.message || 'Erro ao excluir administrador.');
+        }
+      });
+    });
+  </script>
+</div>
+</body>
+</html>

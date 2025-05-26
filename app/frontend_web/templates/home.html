@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+</head>
+
+<body>
+<div class="wrapper">
+
+  <header class="home-header">
+    <div class="container header-container">
+      <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo-topo">
+    </div>
+  </header>
+
+  <section class="welcome-bar">
+    <div class="container welcome-container">
+      <div class="welcome-left">Olá, {{ user_name }}!</div>
+      <div class="welcome-center">Selecione o que deseja visualizar hoje:</div>
+      <div class="welcome-right">
+        <a href="{{ url_for('login_page') }}" class="logout">
+          <img src="{{ url_for('static', filename='img/logout.png') }}" alt="Sair">
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <nav class="main-nav">
+    <div class="container">
+      <ul>
+        <li>
+          <a href="{{ url_for('administradores.listar_admins_ui') }}">
+            LISTAGEM DE ADMINISTRADORES
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('vendas.listar_vendas_ui') }}" class="{% if menu == 'vendas' %}active{% endif %}">
+            VENDAS
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('produtos.listar_produtos_ui') }}" class="{% if menu == 'produtos' %}active{% endif %}">
+            ESTOQUE
+          </a>
+        </li>
+        <li>
+          {# <a href="{{ url_for('relatorios.listar_relatorios_ui') }}" class="{% if menu == 'relatorios' %}active{% endif %}"> #}
+            RELATÓRIOS
+          {# </a> #}
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="container">
+    {% block content %}
+    <div class="home-logo">
+      <img src="{{ url_for('static', filename='img/image1.png') }}" alt="Uai PDV" class="logo-central">
+    </div>
+    {% endblock %}
+  </main>
+
+</div>
+</body>
+</html>

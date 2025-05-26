@@ -1,20 +1,59 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import get_jwt_identity
+# app/controllers/produtos.py
+import os
+from flask import (
+    Blueprint,
+    render_template,
+    redirect,
+    url_for,
+    request,
+    jsonify
+)
+from flask_jwt_extended import (
+    jwt_required,
+    verify_jwt_in_request,
+    get_jwt_identity
+)
 from .auth import auth_required
 from models.database import db
-from models.models import Produtos
+from models.models import Produtos, Administrador
 
 produtos_bp = Blueprint('produtos', __name__)
 
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import get_jwt_identity
-from .auth import auth_required
-from models.database import db
-from models.models import Produtos
+# === ROTA UI: LISTAR PRODUTOS ===
+@produtos_bp.route('/listar-ui', methods=['GET'])
+def listar_produtos_ui():
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return redirect(url_for('login_page'))
 
-produtos_bp = Blueprint('produtos', __name__)
+    user_id = get_jwt_identity()
+    user = Administrador.query.get(user_id)
 
-# GET /produtos - Listar Produtos no Estoque
+    return render_template(
+        'estoque/listar.html',
+        user_name=user.nome,
+        menu='estoque'
+    )
+
+# === ROTA UI: ADICIONAR PRODUTO ===
+@produtos_bp.route('/adicionar-ui', methods=['GET'])
+def adicionar_produto_ui():
+    try:
+        verify_jwt_in_request()
+    except Exception:
+        return redirect(url_for('login_page'))
+
+    user_id = get_jwt_identity()
+    user = Administrador.query.get(user_id)
+
+    return render_template(
+        'estoque/add.html',
+        user_name=user.nome,
+        menu='estoque'
+    )
+
+# === API JSON: LISTAR PRODUTOS ===
 @produtos_bp.route('/', methods=['GET'])
 @auth_required
 def listar_produtos():
@@ -23,109 +62,86 @@ def listar_produtos():
         {
             "id": str(p.id),
             "nome": p.nome,
+            "descricao": p.descricao,
             "quantidade": p.quantidade_estoque,
-            "preco": float(p.preco)
+            "preco": float(p.preco),
+            "categoria": p.categoria
         } for p in produtos
     ]
     return jsonify(resultado), 200
 
-# POST /produtos - Adicionar Novo Produto ao Estoque
+
+# === API JSON: ADICIONAR PRODUTO ===
 @produtos_bp.route('/', methods=['POST'])
 @auth_required
 def adicionar_produto():
     data = request.get_json()
-
-    # Se for apenas um produto (dicionário)
     if isinstance(data, dict):
         data = [data]
-
-    if not isinstance(data, list):
-        return jsonify({"message": "Formato inválido. Envie um objeto ou uma lista de produtos."}), 400
-
     produtos_criados = []
-
     for item in data:
-        nome = item.get('nome')
+        nome      = item.get('nome')
         descricao = item.get('descricao')
-        quantidade = item.get('quantidade')
-        preco = item.get('preco')
-
-        if not nome or quantidade is None or preco is None or not descricao:
-            return jsonify({"message": "Nome, descrição, quantidade e preço são obrigatórios."}), 400
-        if not isinstance(quantidade, int) or quantidade < 0:
-            return jsonify({"message": "Quantidade deve ser um número inteiro positivo."}), 400
-        if not isinstance(preco, (int, float)) or preco <= 0:
-            return jsonify({"message": "Preço deve ser um número maior que zero."}), 400
-
-        novo_produto = Produtos(
+        quantidade= item.get('quantidade')
+        preco     = item.get('preco')
+        categoria = item.get('categoria')
+        if not nome or descricao is None or quantidade is None or preco is None:
+            return jsonify({"message":"Campos obrigatórios."}), 400
+        novo = Produtos(
             nome=nome,
             descricao=descricao,
             quantidade_estoque=quantidade,
-            preco=preco
+            preco=preco,
+            categoria=categoria
         )
-        db.session.add(novo_produto)
-        produtos_criados.append({
-            "nome": nome,
-            "preco": preco,
-            "quantidade": quantidade
-        })
-
+        db.session.add(novo)
+        produtos_criados.append(nome)
     db.session.commit()
+    return jsonify({"message":f"{len(produtos_criados)} produto(s) adicionados."}), 201
 
-    return jsonify({
-        "message": f"{len(produtos_criados)} produto(s) cadastrado(s) com sucesso!",
-        "produtos": produtos_criados
-    }), 201
 
-# PUT /produtos - Editar Produto no Estoque
+@produtos_bp.route('/editar-ui/<string:produto_id>', methods=['GET'])
+@jwt_required()
+def editar_produto_ui(produto_id):
+    user_id = get_jwt_identity()
+    user = Administrador.query.get(user_id)
+    produto = Produtos.query.get_or_404(produto_id)
+
+    return render_template(
+        'estoque/editar.html',
+        user_name=user.nome,
+        produto=produto,
+        menu='estoque'
+    )
+
+# === API JSON: EDITAR PRODUTO ===
 @produtos_bp.route('/', methods=['PUT'])
 @auth_required
 def editar_produto():
     data = request.get_json()
-    produto_id = data.get('produto_id')
-    produto = Produtos.query.get(produto_id)
-
+    produto = Produtos.query.get(data.get('id'))
     if not produto:
-        return jsonify({"message": "Produto não encontrado."}), 404
-
-    nome = data.get('nome')
-    quantidade = data.get('quantidade')
-    preco = data.get('preco')
-
-    if nome:
-        produto.nome = nome
-    if quantidade is not None:
-        if not isinstance(quantidade, int) or quantidade < 0:
-            return jsonify({"message": "Quantidade deve ser um número inteiro positivo."}), 400
-        produto.quantidade_estoque = quantidade
-    if preco is not None:
-        if not isinstance(preco, (int, float)) or preco <= 0:
-            return jsonify({"message": "Preço deve ser um número maior que zero."}), 400
-        produto.preco = preco
-
+        return jsonify({"message":"Produto não encontrado."}), 404
+    if data.get('nome'):      produto.nome      = data['nome']
+    if data.get('descricao'): produto.descricao = data['descricao']
+    if data.get('quantidade') is not None:
+        produto.quantidade_estoque = data['quantidade']
+    if data.get('preco') is not None:
+        produto.preco = data['preco']
+    if data.get('categoria'):
+        produto.categoria = data['categoria']
     db.session.commit()
-
-    return jsonify({
-        "id": str(produto.id),
-        "nome": produto.nome,
-        "quantidade": produto.quantidade_estoque,
-        "preco": float(produto.preco),
-        "message": "Produto editado com sucesso!"
-    }), 200
+    return jsonify({"message":"Produto atualizado com sucesso!"}), 200
 
 
-# DELETE /produtos - Excluir Produto do Estoque
+# === API JSON: EXCLUIR PRODUTO ===
 @produtos_bp.route('/', methods=['DELETE'])
 @auth_required
 def excluir_produto():
     data = request.get_json()
-    produto_id = data.get('produto_id')
-    produto = Produtos.query.get(produto_id)
-
+    produto = Produtos.query.get(data.get('id'))
     if not produto:
-        return jsonify({"message": "Produto não encontrado."}), 404
-
+        return jsonify({"message":"Produto não encontrado."}), 404
     db.session.delete(produto)
     db.session.commit()
-
-    return jsonify({"message": "Produto excluído com sucesso!"}), 200
+    return jsonify({"message":"Produto excluído com sucesso!"}), 200
