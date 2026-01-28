@@ -28,7 +28,7 @@ Este projeto tem como objetivo o desenvolvimento de um **Sistema de Caixa Ponto 
 
 - **Backend**: Python (Flask, MVC)
 - **Banco de Dados**: PostgreSQL (ElephantSQL) com SQLAlchemy
-- **Frontend**: Python (Tkinter ou PyQt)
+- **Frontend**: Python (Flask)
 - **Testes**: Pytest, Postman, Insomnia
 - **Ferramentas de Desenvolvimento**:
   - GitHub
